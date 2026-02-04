@@ -1,0 +1,252 @@
+---
+title: "KIN6520 – Laboratoire I"
+subtitle: "Analyse et interprétation d'un test VO₂max"
+author: "Votre nom"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: true
+  typst:
+    toc: true
+    number-sections: true
+    margin:
+      x: 2.5cm
+      y: 2.5cm
+  docx:
+    toc: true
+    number-sections: true
+execute:
+  echo: false
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    dev: png
+    dpi: 150
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# Chargement des packages nécessaires
+library(tidyverse)
+
+# Chargement des données
+data <- readxl::read_excel("votre_fichier.xlsx")
+```
+
+# Introduction
+
+*Objectif : Présenter brièvement l'objectif du laboratoire et le rôle du test VO₂max dans l'évaluation de l'endurance aérobie. (~0.5 page)*
+
+<!--
+VOTRE TEXTE ICI
+
+Éléments à couvrir :
+- Qu'est-ce que le VO₂max et pourquoi est-il mesuré?
+- Objectif spécifique de ce laboratoire
+- Structure du rapport
+-->
+
+---
+
+# Méthodologie analytique
+
+*Objectif : Décrire et justifier vos choix analytiques. (~1.5 pages)*
+
+::: {.callout-note}
+## Critère de la grille (3 pts)
+**Choix méthodologiques et justification** : Méthodes clairement décrites, justification physiologique cohérente, discussion de l'impact des choix analytiques.
+:::
+
+## Données utilisées
+
+Décrivez les données fournies et les variables retenues pour l'analyse.
+
+```{r}
+#| label: description-donnees
+
+# Aperçu des données
+# VOTRE CODE ICI : utilisez glimpse() ou summary()
+
+```
+
+<!--
+Décrivez ici :
+- Source et nature des données
+- Variables analysées et leurs unités
+- Nombre d'observations et durée du test
+-->
+
+## Traitement des données
+
+Justifiez vos choix de visualisation et de préparation des données.
+
+```{r}
+#| label: visualisation-vo2-temps
+#| fig-cap: "Évolution du VO₂ au cours du test incrémental"
+
+# VOTRE CODE ICI : créez un graphique VO₂ vs temps
+# Pensez à ajouter des labels clairs (labs())
+
+```
+
+```{r}
+#| label: visualisation-vo2-puissance
+#| fig-cap: "Relation entre le VO₂ et la puissance mécanique"
+
+# VOTRE CODE ICI : créez un graphique VO₂ vs puissance
+
+```
+
+<!--
+Justifiez ici :
+- Pourquoi avez-vous choisi ces visualisations?
+- Qu'observez-vous en termes de bruit vs signal?
+- Y a-t-il des artefacts ou valeurs aberrantes?
+-->
+
+## Estimation du VO₂max {#sec-estimation}
+
+Décrivez les méthodes utilisées pour estimer le VO₂max et justifiez vos choix.
+
+```{r}
+#| label: methode-pic
+
+# Méthode 1 : Pic brut
+# VOTRE CODE ICI
+
+```
+
+```{r}
+#| label: methode-moyenne-mobile
+
+# Méthode 2 : Moyenne mobile
+# VOTRE CODE ICI
+# Choisissez et justifiez la taille de la fenêtre (k)
+
+```
+
+<!--
+Expliquez ici :
+- Pourquoi avez-vous choisi ces méthodes spécifiques?
+- Quelle fenêtre de lissage avez-vous utilisée et pourquoi?
+- Quels autres paramètres avez-vous considérés?
+-->
+
+---
+
+# Résultats
+
+*Objectif : Présenter les graphiques et valeurs de manière claire et factuelle. Pas d'interprétation approfondie ici. (~2 pages)*
+
+::: {.callout-note}
+## Critère de la grille (3 pts)
+**Analyse des données physiologiques** : Visualisation claire et pertinente, identification correcte des phases, distinction signal/bruit/artefacts.
+:::
+
+## Visualisation des données
+
+```{r}
+#| label: figure-principale
+#| fig-cap: "Comparaison des données brutes et lissées du VO₂"
+
+# VOTRE CODE ICI : graphique comparant données brutes vs lissées
+# Utilisez des couleurs distinctes et une légende claire
+
+```
+
+## Valeurs obtenues
+
+```{r}
+#| label: tableau-resultats
+
+# VOTRE CODE ICI : créez un tableau récapitulatif des valeurs de VO₂max
+# Incluez les deux méthodes et la différence entre elles
+
+```
+
+<!--
+Observations factuelles à inclure :
+- Valeurs de VO₂max obtenues par chaque méthode
+- Différence entre les méthodes (en mL/min et en %)
+- Description des phases identifiées dans le test
+-->
+
+---
+
+# Discussion
+
+*Objectif : Interpréter les résultats de manière critique et nuancée. (~2-3 pages)*
+
+::: {.callout-note}
+## Critère de la grille (3 pts)
+**Interprétation physiologique** : Interprétation cohérente et nuancée, limites clairement identifiées, positionnement correct du VO₂max par rapport à l'endurance.
+:::
+
+## Comparaison des méthodes d'estimation
+
+<!--
+Discutez ici :
+- Pourquoi les méthodes donnent-elles des valeurs différentes?
+- Quel est l'impact du choix de la fenêtre de lissage?
+- Quelle méthode préféreriez-vous dans un contexte clinique vs recherche?
+-->
+
+## Limites méthodologiques
+
+<!--
+Identifiez les sources d'incertitude :
+- Variabilité de la mesure respiratoire
+- Choix analytiques et leur impact
+- Critères de maximalité (RER, FC, plateau?)
+- Représentativité d'un test unique
+-->
+
+## VO₂max et performance d'endurance {#sec-vo2max-performance}
+
+<!--
+Discutez la relation VO₂max-performance :
+- Le VO₂max prédit-il directement la performance?
+- Quels autres facteurs sont importants (économie, seuils, cinétique)?
+- Ouverture vers les laboratoires suivants
+-->
+
+---
+
+# Conclusion
+
+*Synthèse concise (~0.5 page)*
+
+<!--
+Message clé à retenir :
+- Synthèse des principaux résultats
+- Ce que ce laboratoire vous a appris sur l'analyse de données physiologiques
+- Une phrase résumant le message central
+-->
+
+---
+
+# Annexe – Utilisation de l'IA (si applicable)
+
+*Si vous avez utilisé des outils d'IA (ChatGPT, Claude, Copilot, etc.), décrivez-les ici.*
+
+<!--
+Éléments à inclure :
+- Outils utilisés et à quel moment
+- Exemples de prompts utilisés
+- Jugement critique : qu'avez-vous accepté/modifié/rejeté?
+- Ce que l'IA a apporté et ses limites observées
+-->
+
+---
+
+# Références
+
+<!--
+Listez vos sources si vous en avez utilisé.
+Format suggéré : APA ou Vancouver
+-->

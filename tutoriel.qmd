@@ -1,0 +1,905 @@
+---
+title: "KIN6520 – Préparation au Laboratoire I"
+subtitle: "Introduction à R, tidyverse et Quarto"
+author: "Jonathan Tremblay"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+  typst:
+    toc: true
+    number-sections: true
+    margin:
+      x: 2.5cm
+      y: 2.5cm
+  docx:
+    toc: true
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  eval: true
+knitr:
+  opts_chunk:
+    dev: png
+    dpi: 150
+---
+
+## Objectif de ce tutoriel
+
+Ce document vous prépare à l'activité en classe du Laboratoire I. Après l'avoir complété, vous serez en mesure de :
+
+- Comprendre la syntaxe de base de R
+- Manipuler des données avec le tidyverse
+- Créer des graphiques avec ggplot2
+- Rédiger des documents reproductibles avec Quarto
+
+::: {.callout-tip}
+## Temps estimé
+Environ **60 à 90 minutes** pour compléter ce tutoriel. Prenez le temps d'exécuter chaque bloc de code et d'expérimenter!
+:::
+
+---
+
+# Partie 1 : L'environnement de travail
+
+## Qu'est-ce que R?
+
+**R** est un langage de programmation conçu pour l'analyse statistique et la visualisation de données. Pensez-y comme une calculatrice extrêmement puissante qui peut :
+
+- Importer et manipuler des jeux de données
+- Effectuer des analyses statistiques
+- Créer des graphiques de qualité publication
+- Automatiser des tâches répétitives
+
+## Qu'est-ce que Positron?
+
+**Positron** est l'environnement de développement intégré (IDE) que nous utilisons. C'est l'interface graphique qui facilite l'écriture et l'exécution du code R. Ses composantes principales sont :
+
+| Zone | Fonction |
+|------|----------|
+| **Éditeur** (centre) | Où vous écrivez votre code et vos documents |
+| **Console** (bas) | Où R exécute les commandes et affiche les résultats |
+| **Environnement** (droite) | Liste des objets (variables, données) en mémoire |
+| **Fichiers/Graphiques** (droite) | Navigation dans les fichiers et affichage des figures |
+
+## Qu'est-ce que Quarto?
+
+**Quarto** (extension `.qmd`) est un format de document qui combine texte et code. C'est ce qui nous permet de créer des rapports reproductibles : le même fichier contient l'analyse ET le texte, garantissant que les résultats présentés correspondent exactement au code exécuté.
+
+---
+
+# Partie 2 : Les bases de R
+
+## Exécuter du code
+
+Dans Positron, vous pouvez exécuter du code de plusieurs façons :
+
+1. **Bloc entier** : Cliquez sur ▶ à droite du bloc de code
+2. **Ligne par ligne** : Placez le curseur et appuyez sur `Ctrl+Enter` (Windows) ou `Cmd+Enter` (Mac)
+3. **Sélection** : Sélectionnez plusieurs lignes et appuyez sur `Ctrl+Enter`
+
+::: {.callout-tip}
+## Essayez!
+Exécutez le bloc suivant pour vérifier que tout fonctionne.
+:::
+
+```{r}
+# Ceci est un commentaire - R l'ignore
+# Les commentaires commencent par #
+
+print("Bienvenue dans R!")
+```
+
+## Variables et assignation
+
+Une **variable** est un conteneur qui stocke une valeur. En R, on utilise `<-` pour assigner une valeur à une variable.
+
+```{r}
+# Assigner la valeur 75 à la variable "masse"
+masse <- 75
+
+# Assigner la valeur 1.80 à la variable "taille"
+taille <- 1.80
+
+# Afficher le contenu d'une variable (tapez simplement son nom)
+masse
+```
+
+::: {.callout-note}
+## Convention de nommage
+- Utilisez des noms descriptifs : `vo2_max` plutôt que `x`
+- Évitez les accents et les espaces
+- R est sensible à la casse : `Masse` ≠ `masse`
+:::
+
+## Opérations de base
+
+R peut effectuer toutes les opérations arithmétiques standard :
+
+```{r}
+# Addition, soustraction, multiplication, division
+10 + 5
+20 - 8
+4 * 7
+100 / 4
+
+# Puissance
+2^3  # 2 à la puissance 3
+
+# Calcul avec des variables
+imc <- masse / taille^2
+imc
+```
+
+## Fonctions
+
+Une **fonction** est une commande qui effectue une action spécifique. Elle prend des **arguments** en entrée et retourne un **résultat**.
+
+```{r}
+# Syntaxe : nom_fonction(argument1, argument2, ...)
+
+# Racine carrée
+sqrt(16)
+
+# Arrondir à 2 décimales
+round(3.14159, digits = 2)
+
+# Valeur absolue
+abs(-5)
+
+# Moyenne d'un ensemble de valeurs
+mean(c(10, 20, 30, 40, 50))
+```
+
+::: {.callout-tip}
+## Aide sur une fonction
+Pour obtenir de l'aide sur une fonction, tapez `?nom_fonction` dans la console :
+```{r}
+#| eval: false
+?mean
+```
+:::
+
+## Vecteurs
+
+Un **vecteur** est une séquence de valeurs du même type. On le crée avec la fonction `c()` (pour "combiner").
+
+```{r}
+# Créer un vecteur de fréquences cardiaques
+fc <- c(72, 85, 110, 145, 178, 185)
+
+# Longueur du vecteur
+length(fc)
+
+# Accéder à un élément (R commence à 1, pas à 0!)
+fc[1]   # Premier élément
+fc[3]   # Troisième élément
+
+# Accéder à plusieurs éléments
+fc[c(1, 3, 5)]  # 1er, 3e et 5e éléments
+fc[2:4]         # Éléments 2 à 4
+```
+
+## Fonctions sur les vecteurs
+
+Plusieurs fonctions travaillent sur des vecteurs entiers :
+
+```{r}
+# Statistiques descriptives
+mean(fc)    # Moyenne
+sd(fc)      # Écart-type
+min(fc)     # Minimum
+max(fc)     # Maximum
+range(fc)   # Min et max ensemble
+
+# Résumé complet
+summary(fc)
+```
+
+## Le pipe `|>`
+
+Le **pipe** (`|>`) permet d'enchaîner des opérations de manière lisible. Il se lit comme "PUIS" ou "ensuite".
+
+```{r}
+# Sans pipe (difficile à lire avec plusieurs opérations)
+round(sqrt(mean(fc)), 2)
+
+# Avec pipe (se lit de gauche à droite)
+fc |>
+  mean() |>
+  sqrt() |>
+  round(2)
+```
+
+::: {.callout-important}
+## Lecture du pipe
+`x |> f()` signifie "prends x, PUIS applique la fonction f"
+
+Le pipe passe automatiquement le résultat précédent comme **premier argument** de la fonction suivante.
+:::
+
+---
+
+# Partie 3 : Le tidyverse
+
+## Qu'est-ce que le tidyverse?
+
+Le **tidyverse** est une collection de packages R conçus pour la science des données. Ces packages partagent une philosophie commune et fonctionnent bien ensemble.
+
+```{r}
+# Charger le tidyverse (fait une seule fois au début du document)
+library(tidyverse)
+```
+
+::: {.callout-note}
+## Installer un package
+
+Avant de pouvoir utiliser un package avec `library()`, il faut d'abord l'**installer** sur votre ordinateur. L'installation se fait une seule fois, tandis que le chargement avec `library()` doit être fait à chaque nouvelle session R.
+
+```{r}
+#| eval: false
+
+# Installer un package (une seule fois)
+install.packages("tidyverse")
+
+# Installer plusieurs packages à la fois
+install.packages(c("tidyverse", "readxl"))
+```
+
+Dans Positron, vous pouvez aussi cliquer sur l'onglet **Packages** dans le panneau de droite, puis sur **Install** pour installer un package via l'interface graphique.
+:::
+
+Les principaux packages du tidyverse que nous utiliserons :
+
+| Package | Fonction |
+|---------|----------|
+| **readr** | Importer des données (CSV, etc.) |
+| **readxl** | Importer des fichiers Excel |
+| **dplyr** | Manipuler des tableaux de données |
+| **ggplot2** | Créer des graphiques |
+| **tibble** | Tableaux de données modernes |
+
+## Les tableaux de données (data frames)
+
+Un **data frame** (ou **tibble** dans le tidyverse) est un tableau où :
+
+- Chaque **colonne** est une variable
+- Chaque **ligne** est une observation
+
+```{r}
+# Créer un petit tableau d'exemple
+donnees_test <- tibble(
+  temps_s = c(0, 60, 120, 180, 240, 300),
+  vo2_ml = c(350, 890, 1250, 1800, 2300, 2450),
+  fc_bpm = c(72, 95, 120, 145, 168, 182),
+  puissance_w = c(0, 50, 100, 150, 200, 250)
+)
+
+# Afficher le tableau
+donnees_test
+```
+
+## Importer des données avec readr
+
+La fonction `read_csv()` importe des fichiers CSV (valeurs séparées par des virgules) :
+
+```{r}
+#| eval: false
+
+# Syntaxe de base
+data <- read_csv("chemin/vers/fichier.csv")
+
+# En classe, nous utiliserons :
+data <- read_csv("donnees_vo2max.csv")
+```
+
+## Importer des données Excel avec readxl
+
+Le package **readxl** permet d'importer des fichiers Excel (`.xlsx` ou `.xls`) directement dans R, sans avoir besoin de les convertir en CSV.
+
+```{r}
+#| eval: false
+
+# Charger le package readxl (une seule fois)
+library(readxl)
+
+# Importer un fichier Excel
+data <- read_excel("chemin/vers/fichier.xlsx")
+
+# Spécifier une feuille particulière (par nom ou numéro)
+data <- read_excel("fichier.xlsx", sheet = "Feuille1")
+data <- read_excel("fichier.xlsx", sheet = 2)  # Deuxième feuille
+
+# Spécifier une plage de cellules
+data <- read_excel("fichier.xlsx", range = "A1:D50")
+
+# Ignorer les premières lignes (ex: si l'en-tête n'est pas à la ligne 1)
+data <- read_excel("fichier.xlsx", skip = 2)
+```
+
+::: {.callout-tip}
+## Différences entre read_csv() et read_excel()
+
+| Aspect | `read_csv()` | `read_excel()` |
+|--------|--------------|----------------|
+| **Format** | Fichiers `.csv` | Fichiers `.xlsx`, `.xls` |
+| **Package** | readr (inclus dans tidyverse) | readxl (à charger séparément) |
+| **Feuilles** | Un seul tableau | Peut avoir plusieurs feuilles |
+| **Formules** | Non applicable | Lit les valeurs, pas les formules |
+:::
+
+::: {.callout-note}
+## Voir les feuilles disponibles
+Pour connaître les noms des feuilles d'un fichier Excel :
+```{r}
+#| eval: false
+excel_sheets("fichier.xlsx")
+```
+:::
+
+## Explorer les données
+
+Plusieurs fonctions permettent d'examiner un tableau :
+
+```{r}
+# Aperçu de la structure (colonnes, types, premières valeurs)
+glimpse(donnees_test)
+
+# Premières lignes
+head(donnees_test)
+
+# Dernières lignes
+tail(donnees_test)
+
+# Dimensions (lignes x colonnes)
+dim(donnees_test)
+
+# Noms des colonnes
+names(donnees_test)
+
+# Résumé statistique
+summary(donnees_test)
+```
+
+## Manipuler les données avec dplyr
+
+Le package **dplyr** fournit des "verbes" pour manipuler les données. Les plus courants sont :
+
+### `select()` – Choisir des colonnes
+
+```{r}
+# Garder seulement certaines colonnes
+donnees_test |>
+  select(temps_s, vo2_ml)
+
+# Exclure une colonne
+donnees_test |>
+  select(-puissance_w)
+```
+
+### `filter()` – Filtrer des lignes
+
+```{r}
+# Garder les lignes où la puissance > 100 W
+donnees_test |>
+  filter(puissance_w > 100)
+
+# Plusieurs conditions (ET)
+donnees_test |>
+  filter(puissance_w > 100, fc_bpm < 170)
+
+# Conditions OU
+donnees_test |>
+  filter(puissance_w < 50 | puissance_w > 200)
+```
+
+### `mutate()` – Créer ou modifier des colonnes
+
+```{r}
+# Ajouter une nouvelle colonne
+donnees_test |>
+  mutate(
+    vo2_L = vo2_ml / 1000,  # Convertir mL en L
+    temps_min = temps_s / 60  # Convertir s en min
+  )
+
+# Modifier une colonne existante
+donnees_test |>
+  mutate(vo2_ml = round(vo2_ml, -1))  # Arrondir à la dizaine
+```
+
+### `arrange()` – Trier les lignes
+
+```{r}
+# Trier par VO₂ croissant
+donnees_test |>
+  arrange(vo2_ml)
+
+# Trier par VO₂ décroissant
+donnees_test |>
+  arrange(desc(vo2_ml))
+```
+
+### `summarise()` – Résumer les données
+
+```{r}
+# Calculer des statistiques résumées
+donnees_test |>
+  summarise(
+    vo2_moyen = mean(vo2_ml),
+    vo2_max = max(vo2_ml),
+    fc_max = max(fc_bpm)
+  )
+```
+
+### Enchaîner les opérations
+
+La vraie puissance du tidyverse vient de la possibilité d'enchaîner les opérations :
+
+```{r}
+donnees_test |>
+  filter(puissance_w > 0) |>           # Exclure le repos
+  mutate(vo2_L = vo2_ml / 1000) |>     # Convertir en L
+  select(temps_s, puissance_w, vo2_L)  # Garder ces colonnes
+```
+
+---
+
+# Partie 4 : Visualisation avec ggplot2
+
+## La grammaire des graphiques
+
+**ggplot2** utilise une "grammaire des graphiques" où un graphique est construit couche par couche :
+
+1. **Données** : le tableau à visualiser
+2. **Esthétiques** (`aes`) : quelles variables sur quels axes
+3. **Géométries** (`geom_`) : comment représenter les données
+4. **Autres couches** : titres, thèmes, échelles...
+
+## Structure de base
+
+```{r}
+#| fig-cap: "Structure de base d'un graphique ggplot2"
+
+# Structure : ggplot(données, aes(x = ..., y = ...)) + geom_xxx()
+ggplot(donnees_test, aes(x = temps_s, y = vo2_ml)) +
+  geom_point()
+```
+
+## Types de géométries courantes
+
+### Points : `geom_point()`
+
+```{r}
+#| fig-cap: "Nuage de points : VO₂ en fonction de la puissance"
+
+ggplot(donnees_test, aes(x = puissance_w, y = vo2_ml)) +
+  geom_point(size = 3, color = "darkblue")
+```
+
+### Lignes : `geom_line()`
+
+```{r}
+#| fig-cap: "Courbe : évolution du VO₂ dans le temps"
+
+ggplot(donnees_test, aes(x = temps_s, y = vo2_ml)) +
+  geom_line(linewidth = 1, color = "darkred")
+```
+
+### Combiner points et lignes
+
+```{r}
+#| fig-cap: "Combinaison de points et de ligne"
+
+ggplot(donnees_test, aes(x = temps_s, y = vo2_ml)) +
+  geom_line(color = "gray50") +
+  geom_point(size = 3, color = "darkblue")
+```
+
+## Personnaliser les graphiques
+
+### Ajouter des titres et étiquettes avec `labs()`
+
+```{r}
+#| fig-cap: "Graphique avec titres et étiquettes"
+
+ggplot(donnees_test, aes(x = temps_s, y = vo2_ml)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Évolution du VO₂ pendant le test",
+    subtitle = "Test incrémental maximal",
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)",
+    caption = "Source : données simulées"
+  )
+```
+
+### Utiliser la couleur pour une variable
+
+```{r}
+#| fig-cap: "Couleur représentant la fréquence cardiaque"
+
+ggplot(donnees_test, aes(x = temps_s, y = vo2_ml, color = fc_bpm)) +
+  geom_point(size = 4) +
+  scale_color_viridis_c() +  # Échelle de couleur continue
+  labs(
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)",
+    color = "FC (bpm)"
+  )
+```
+
+### Transparence avec `alpha`
+
+```{r}
+#| fig-cap: "Utilisation de la transparence"
+
+# Créer des données avec plus de bruit pour illustrer
+set.seed(42)
+donnees_bruit <- tibble(
+  temps = rep(1:100, each = 3),
+  vo2 = 2000 + temps * 10 + rnorm(300, 0, 150)
+)
+
+ggplot(donnees_bruit, aes(x = temps, y = vo2)) +
+  geom_point(alpha = 0.3) +  # Points semi-transparents
+  labs(x = "Temps (s)", y = "VO₂ (mL/min)")
+```
+
+### Thèmes prédéfinis
+
+```{r}
+#| fig-cap: "Différents thèmes disponibles"
+
+# Graphique de base
+p <- ggplot(donnees_test, aes(x = temps_s, y = vo2_ml)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Temps (s)", y = "VO₂ (mL/min)")
+
+# Thème minimaliste (recommandé pour les publications)
+p + theme_minimal()
+```
+
+## Superposer des données
+
+Un patron très utile : superposer données brutes et données traitées.
+
+```{r}
+#| fig-cap: "Superposition de données brutes et lissées"
+
+# Simuler des données brutes vs lissées
+set.seed(123)
+exemple <- tibble(
+  temps = 1:50,
+  vo2_brut = 1500 + temps * 20 + rnorm(50, 0, 100),
+  vo2_lisse = 1500 + temps * 20
+)
+
+ggplot(exemple, aes(x = temps)) +
+  geom_line(aes(y = vo2_brut), alpha = 0.3, color = "gray40") +
+  geom_line(aes(y = vo2_lisse), color = "blue", linewidth = 1.2) +
+  labs(
+    title = "Comparaison données brutes vs lissées",
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)"
+  ) +
+  theme_minimal()
+```
+
+---
+
+# Partie 5 : Documents Quarto
+
+## Structure d'un document Quarto
+
+Un document `.qmd` contient trois éléments :
+
+1. **En-tête YAML** (entre `---`) : métadonnées du document
+2. **Texte Markdown** : contenu narratif
+3. **Blocs de code** : analyses R
+
+### L'en-tête YAML
+
+```yaml
+---
+title: "Mon titre"
+author: "Mon nom"
+date: today
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+---
+```
+
+Options courantes :
+
+| Option | Description |
+|--------|-------------|
+| `toc: true` | Table des matières |
+| `code-fold: true` | Code masquable |
+| `echo: true/false` | Afficher/masquer le code |
+| `eval: true/false` | Exécuter/ignorer le code |
+
+### Texte Markdown
+
+```markdown
+# Titre de niveau 1
+## Titre de niveau 2
+### Titre de niveau 3
+
+Texte normal avec *italique* et **gras**.
+
+- Liste à puces
+- Autre élément
+
+1. Liste numérotée
+2. Deuxième élément
+
+[Lien vers un site](https://www.umontreal.ca)
+```
+
+### Blocs de code R
+
+Les blocs de code sont délimités par trois accents graves :
+
+````markdown
+```{r}
+# Votre code R ici
+mean(c(1, 2, 3))
+```
+````
+
+## Options des blocs de code
+
+Chaque bloc peut avoir ses propres options :
+
+```
+{{r}}
+#| label: mon-graphique
+#| fig-cap: "Ma légende de figure"
+#| echo: false
+#| eval: true
+
+ggplot(data, aes(x, y)) + geom_point()
+```
+
+| Option | Description |
+|--------|-------------|
+| `label` | Nom unique du bloc (pour références) |
+| `echo` | Afficher le code (`true`/`false`) |
+| `eval` | Exécuter le code (`true`/`false`) |
+| `fig-cap` | Légende de la figure |
+| `warning` | Afficher les avertissements |
+| `message` | Afficher les messages |
+
+## Générer le document (Render)
+
+Pour produire votre document final :
+
+1. Cliquez sur **Render** (ou `Ctrl+Shift+K`)
+2. Choisissez le format : HTML, PDF (via Typst), ou Word
+
+::: {.callout-tip}
+## Formats de sortie
+- **HTML** : interactif, idéal pour l'exploration
+- **Typst/PDF** : mise en page fixe, idéal pour impression
+- **Word** : si révision/commentaires nécessaires
+:::
+
+## Callouts (encadrés)
+
+Quarto offre des encadrés colorés pour attirer l'attention :
+
+::: {.callout-note}
+## Note
+Pour des informations complémentaires.
+:::
+
+::: {.callout-tip}
+## Astuce
+Pour des conseils pratiques.
+:::
+
+::: {.callout-warning}
+## Attention
+Pour des mises en garde.
+:::
+
+::: {.callout-important}
+## Important
+Pour des points essentiels.
+:::
+
+Syntaxe :
+```markdown
+::: {.callout-note}
+## Titre de l'encadré
+Contenu de l'encadré.
+:::
+```
+
+---
+
+# Partie 6 : Exercices de préparation
+
+Complétez ces exercices pour vérifier votre compréhension.
+
+## Exercice 1 : Manipulations de base
+
+```{r}
+#| eval: false
+
+# 1. Créez un vecteur "puissances" contenant : 50, 100, 150, 200, 250, 300
+puissances <- ___
+
+# 2. Calculez la moyenne de ce vecteur
+moyenne_puissance <- ___
+
+# 3. Trouvez la valeur maximale
+puissance_max <- ___
+
+# 4. Créez un nouveau vecteur avec chaque valeur divisée par 10
+puissances_kw <- ___
+```
+
+::: {.callout-tip}
+## Solution
+```{r}
+puissances <- c(50, 100, 150, 200, 250, 300)
+moyenne_puissance <- mean(puissances)
+puissance_max <- max(puissances)
+puissances_kw <- puissances / 10
+
+# Vérification
+moyenne_puissance
+puissance_max
+puissances_kw
+```
+:::
+
+## Exercice 2 : Manipulation de tableau
+
+```{r}
+# Données pour l'exercice
+exercice_data <- tibble(
+  sujet = c("A", "B", "C", "D", "E"),
+  vo2max_ml = c(3200, 4100, 2800, 3600, 4500),
+  masse_kg = c(70, 82, 58, 75, 90),
+  age = c(25, 32, 28, 22, 35)
+)
+```
+
+```{r}
+#| eval: false
+
+# 1. Affichez un aperçu des données avec glimpse()
+
+
+# 2. Filtrez les sujets avec un VO₂max > 3500 mL/min
+
+
+# 3. Ajoutez une colonne vo2max_relatif (mL/kg/min) = vo2max_ml / masse_kg
+
+
+# 4. Triez par vo2max_relatif décroissant
+
+```
+
+::: {.callout-tip}
+## Solution
+```{r}
+# 1. Aperçu
+glimpse(exercice_data)
+
+# 2. Filtrer
+exercice_data |>
+  filter(vo2max_ml > 3500)
+
+# 3. Ajouter colonne
+exercice_data |>
+  mutate(vo2max_relatif = vo2max_ml / masse_kg)
+
+# 4. Trier
+exercice_data |>
+  mutate(vo2max_relatif = vo2max_ml / masse_kg) |>
+  arrange(desc(vo2max_relatif))
+```
+:::
+
+## Exercice 3 : Graphique
+
+```{r}
+#| eval: false
+
+# Créez un graphique montrant la relation entre masse_kg (axe x)
+# et vo2max_ml (axe y) avec :
+# - Des points de taille 4
+# - Une couleur bleue
+# - Un titre approprié
+# - Des étiquettes d'axes en français
+
+ggplot(exercice_data, aes(___)) +
+  geom____() +
+  labs(
+    ___
+  )
+```
+
+::: {.callout-tip}
+## Solution
+```{r}
+ggplot(exercice_data, aes(x = masse_kg, y = vo2max_ml)) +
+  geom_point(size = 4, color = "blue") +
+  labs(
+    title = "Relation entre la masse corporelle et le VO₂max",
+    x = "Masse corporelle (kg)",
+    y = "VO₂max (mL/min)"
+  ) +
+  theme_minimal()
+```
+:::
+
+---
+
+# Résumé des fonctions essentielles
+
+## Fonctions R de base
+
+| Fonction | Description | Exemple |
+|----------|-------------|---------|
+| `<-` | Assignation | `x <- 5` |
+| `c()` | Créer un vecteur | `c(1, 2, 3)` |
+| `mean()` | Moyenne | `mean(x)` |
+| `max()` | Maximum | `max(x)` |
+| `min()` | Minimum | `min(x)` |
+| `sd()` | Écart-type | `sd(x)` |
+| `sqrt()` | Racine carrée | `sqrt(16)` |
+| `round()` | Arrondir | `round(3.14, 1)` |
+| `length()` | Longueur | `length(x)` |
+
+## Fonctions tidyverse
+
+| Fonction | Package | Description |
+|----------|---------|-------------|
+| `read_csv()` | readr | Importer un CSV |
+| `read_excel()` | readxl | Importer un fichier Excel |
+| `glimpse()` | dplyr | Aperçu des données |
+| `filter()` | dplyr | Filtrer les lignes |
+| `select()` | dplyr | Choisir des colonnes |
+| `mutate()` | dplyr | Créer/modifier colonnes |
+| `arrange()` | dplyr | Trier les lignes |
+| `summarise()` | dplyr | Résumer les données |
+| `tibble()` | tibble | Créer un tableau |
+
+## Fonctions ggplot2
+
+| Fonction | Description |
+|----------|-------------|
+| `ggplot()` | Initialiser un graphique |
+| `aes()` | Définir les esthétiques |
+| `geom_point()` | Nuage de points |
+| `geom_line()` | Ligne |
+| `labs()` | Titres et étiquettes |
+| `theme_minimal()` | Thème épuré |
+
+---
+
+# Ressources supplémentaires
+
+- [R for Data Science (2e édition)](https://r4ds.hadley.nz/) — Le livre de référence (gratuit en ligne)
+- [Quarto Documentation](https://quarto.org/docs/guide/) — Guide officiel de Quarto
+- [ggplot2 Cheat Sheet](https://rstudio.github.io/cheatsheets/data-visualization.pdf) — Aide-mémoire visuel
+
+::: {.callout-important}
+## Prêt pour le laboratoire?
+Si vous avez complété ce tutoriel et les exercices, vous êtes prêt pour l'activité en classe! N'hésitez pas à revenir consulter ce document comme référence pendant le laboratoire.
+:::

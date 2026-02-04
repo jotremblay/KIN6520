@@ -1,0 +1,364 @@
+---
+title: "KIN6520 – Laboratoire I (en classe)"
+subtitle: "Lire et interpréter un test VO₂max"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+  typst:
+    toc: true
+    number-sections: true
+  docx:
+    toc: true
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    dev: png
+    dpi: 150
+---
+
+## Objectif de la séance
+
+Ce document sert de support **d'exploration collective** des données issues d'un test incrémental maximal.
+
+L'objectif n'est pas d'obtenir *la* valeur du VO₂max, mais de comprendre :
+
+- comment elle émerge des données,
+- pourquoi elle dépend de choix analytiques,
+- ce que le test maximal permet (et ne permet pas) d'inférer.
+
+::: {.callout-important}
+## Message central
+**Toute mesure physiologique est indissociable des choix analytiques qui la produisent.**
+:::
+
+---
+
+## Section 0 : Prise en main de Positron (~10 min)
+
+### Qu'est-ce que R et Quarto?
+
+- **R** : Un langage de programmation pour l'analyse statistique (comme une calculatrice très puissante)
+- **Positron** : L'environnement où nous travaillons (l'interface)
+- **Quarto** (.qmd) : Un format de document qui mélange texte et code (comme ce fichier!)
+
+### Comment exécuter du code
+
+Dans Positron, vous avez deux options :
+
+1. **Un seul bloc** : Cliquez sur le bouton ▶ à droite du bloc de code
+2. **Ligne par ligne** : Placez le curseur sur une ligne et appuyez sur `Ctrl+Enter` (ou `Cmd+Enter` sur Mac)
+
+### Générer un document (Render)
+
+Quarto peut produire différents formats à partir du même fichier. Dans Positron :
+
+1. Cliquez sur la **flèche** à côté du bouton **Render** (en haut à droite de l'éditeur)
+2. Sélectionnez le format désiré :
+   - **HTML** : page web interactive
+   - **Typst** : document PDF imprimable
+   - **Word** : document Microsoft Word (.docx)
+3. Le document s'ouvrira automatiquement après la génération
+
+### Syntaxe de base
+
+```{r}
+#| eval: false
+
+# Ceci est un commentaire - R l'ignore
+
+# Assigner une valeur à une variable (le résultat est stocké dans "x")
+x <- 5
+
+# Afficher le contenu d'une variable
+x
+
+# Enchaîner des opérations avec le pipe |>
+# Lire comme : "prends x, PUIS fais quelque chose"
+x |> sqrt()  # équivalent à : sqrt(x)
+```
+
+### Charger une "boîte à outils" (package)
+
+```{r}
+# La fonction library() charge un ensemble de fonctions
+# tidyverse = outils pour manipuler et visualiser des données
+library(tidyverse)
+```
+
+---
+
+## Étape 1 : Visualisation brute (~30 min)
+
+### 1.1 Importation des données
+
+Notre fichier Excel provient d'un analyseur métabolique (COSMED). Le format brut contient :
+
+- Des **métadonnées** dans les premières lignes (informations sur le participant, conditions du test)
+- Les **données physiologiques** à partir de la ligne 4, avec les en-têtes à la ligne 1
+- Plus de 40 colonnes, dont nous n'utiliserons qu'une partie
+
+Nous importons seulement les colonnes pertinentes pour l'analyse :
+
+- `time` : temps en secondes (converti depuis le format Excel)
+- `vo2` : consommation d'oxygène (mL/min)
+- `vco2` : production de CO₂ (mL/min)
+- `ve` : ventilation minute (L/min)
+- `hr` : fréquence cardiaque (bpm)
+- `rer` : quotient respiratoire (VCO₂/VO₂)
+- `speed_kph` : vitesse sur tapis roulant (km/h)
+- `phase` : phase du protocole (REST, WARMUP, EXERCISE, etc.)
+
+```{r}
+# Importation du fichier Excel COSMED
+# Étape 1 : Lire les noms de colonnes depuis la ligne 1 (colonnes J à BE)
+col_names <- readxl::read_excel(
+  "data.xlsx",
+  range = "J1:BE1",
+  col_names = FALSE
+) |> unlist() |> unname()
+
+# Étape 2 : Lire les données à partir de la ligne 4 (après métadonnées et unités)
+data_raw <- readxl::read_excel(
+  "data.xlsx",
+  range = "J4:BE500",
+  col_names = col_names
+)
+
+# Étape 3 : Sélection et renommage des colonnes d'intérêt
+data <- data_raw |>
+  select(
+    time = t,
+    vo2 = VO2,
+    vco2 = VCO2,
+    ve = VE,
+    hr = HR,
+    rer = RQ,
+    speed_kph = Speed,
+    phase = Phase
+  ) |>
+  mutate(
+    # Conversion du temps : Excel stocke le temps comme POSIXct
+    # On extrait heures, minutes, secondes → total en secondes depuis minuit
+    time = as.numeric(format(time, "%H")) * 3600 +
+           as.numeric(format(time, "%M")) * 60 +
+           as.numeric(format(time, "%S"))
+  )
+
+# Aperçu de la structure des données
+summary(data)
+glimpse(data)
+skimr::skim(data)
+```
+
+::: {.callout-note}
+## Pourquoi ces étapes?
+1. **Lignes 1-3** : Le fichier COSMED contient des métadonnées (participant, conditions) et une ligne d'unités qu'on doit ignorer
+2. **Colonnes J-BE** : Les colonnes A-I contiennent des infos sur le participant; les données physiologiques commencent en colonne J
+3. **Conversion du temps** : Excel stocke le temps comme un objet datetime qu'on convertit en secondes
+4. **Sélection** : On garde uniquement les 8 variables essentielles parmi les 48 disponibles
+:::
+
+::: {.callout-tip}
+## À observer
+Combien de lignes (respirations) avons-nous? Quelle est la durée totale du test?
+:::
+
+### 1.2 VO₂ en fonction du temps {#sec-vo2-temps}
+
+Créons notre premier graphique pour voir l'évolution du VO₂ pendant le test.
+
+```{r}
+# ggplot() crée un graphique
+# aes() définit les axes (x = temps, y = VO2)
+# geom_line() trace une ligne reliant les points
+ggplot(data, aes(x = time, y = vo2)) +
+  geom_line() +
+  labs(
+    title = "Évolution du VO₂ pendant le test",
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)"
+  )
+```
+
+::: {.callout-note}
+## Questions de réflexion
+- Où voyez-vous du **bruit** (variabilité à court terme)?
+- Où voyez-vous une **tendance physiologique** claire?
+- Voyez-vous un **plateau** évident à la fin du test?
+:::
+
+### 1.3 VO₂ en fonction de la charge externe {#sec-vo2-vitesse}
+
+Comparons avec la relation VO₂ vs vitesse :
+
+```{r}
+ggplot(data, aes(x = speed_kph, y = vo2)) +
+  geom_point(alpha = 0.5) +  # alpha = transparence (0-1)
+  labs(
+    title = "Relation VO₂ - Vitesse",
+    x = "Vitesse (km/h)",
+    y = "VO₂ (mL/min)"
+  )
+```
+
+::: {.callout-note}
+## Questions de réflexion
+- Cette figure raconte-t-elle la **même histoire** que VO₂ vs temps?
+- La relation est-elle **strictement linéaire** sur toute la plage?
+- Pourquoi la variabilité semble-t-elle plus grande à haute intensité?
+:::
+
+### 1.4 Identification des phases du test
+
+Ajoutons de la couleur pour identifier les différentes phases du protocole :
+
+```{r}
+# La colonne "phase" identifie déjà les phases du test (REST, WARMUP, EXERCISE, etc.)
+ggplot(data, aes(x = time, y = vo2, color = phase)) +
+  geom_line() +
+  labs(
+    title = "VO₂ par phase du protocole",
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)",
+    color = "Phase"
+  )
+```
+
+::: {.callout-tip}
+## À discuter en groupe
+- Identifiez les phases : échauffement, paliers, épuisement
+- Y a-t-il des valeurs qui semblent être des **artefacts** (valeurs aberrantes)?
+- Comment distinguer le **bruit de mesure** du **signal physiologique**?
+:::
+
+---
+
+## Étape 2 : Estimation du VO₂max (~35 min) {#sec-estimation}
+
+### 2.1 Méthode 1 : Pic brut {#sec-pic-brut}
+
+L'approche la plus simple : prendre la valeur maximale observée.
+
+```{r}
+# max() trouve la valeur maximale
+# na.rm = TRUE ignore les valeurs manquantes (NA)
+vo2max_pic <- max(data$vo2, na.rm = TRUE)
+vo2max_pic
+```
+
+::: {.callout-warning}
+## Limites de cette approche
+- **Instabilité** : une seule respiration inhabituelle peut donner un "faux" pic
+- **Sensibilité au bruit** : ne distingue pas signal et artefact
+- **Non représentative** : une respiration ≠ capacité physiologique stable
+:::
+
+### 2.2 Méthode 2 : Moyenne mobile (30 secondes)
+
+Pour réduire l'impact du bruit, on peut calculer une moyenne glissante.
+
+```{r}
+# mutate() ajoute une nouvelle colonne aux données
+# zoo::rollmean() calcule la moyenne sur une fenêtre de k points
+# k = 10 signifie environ 30 secondes (si ~3 sec/respiration)
+data <- data |>
+  mutate(
+    vo2_smooth = zoo::rollmean(vo2, k = 3, fill = NA, align = "center")
+  )
+
+# Maintenant, trouver le pic de la version lissée
+vo2max_lisse <- max(data$vo2_smooth, na.rm = TRUE)
+vo2max_lisse
+```
+
+Visualisons la différence :
+
+```{r}
+ggplot(data, aes(x = time)) +
+  geom_line(aes(y = vo2), alpha = 0.8, color = "red") +
+  geom_line(aes(y = vo2_smooth), color = "blue", linewidth = 1) +
+  labs(
+    title = "Comparaison : données brutes vs lissées",
+    subtitle = "Rouge = brut, Bleu = moyenne mobile 30s",
+    x = "Temps (s)",
+    y = "VO₂ (mL/min)"
+  )
+```
+
+::: {.callout-note}
+## Question clé
+Que se passe-t-il si on change la fenêtre de lissage (k = 3 vs k = 6)?
+:::
+
+### 2.3 Comparaison des méthodes
+
+Mettons les résultats côte à côte :
+
+```{r}
+# tibble() crée un petit tableau
+# Nous calculons aussi la différence relative
+comparaison <- tibble(
+  methode = c("Pic brut", "Moyenne mobile 30s"),
+  vo2max_ml = c(vo2max_pic, vo2max_lisse),
+  difference_pct = round((vo2max_ml - vo2max_lisse) / vo2max_lisse * 100, 1)
+)
+
+comparaison
+```
+
+::: {.callout-important}
+## Discussion critique
+- **Pourquoi** obtient-on des valeurs différentes?
+- Quelle méthode est "meilleure"? (Indice : il n'y a pas de bonne réponse unique!)
+- Quel **impact** ces différences ont-elles sur l'interprétation?
+:::
+
+### 2.4 (Bonus) Aperçu du package cardiometR {#sec-cardiometr}
+
+Pour illustrer comment les outils professionnels automatisent ces choix :
+
+```{r}
+#| eval: false
+
+# Si le package est installé, on peut l'utiliser ainsi :
+# library(cardiometR)
+
+# Importer des données COSMED
+# data_cpet <- read_cosmed("fichier_cosmed.xlsx")
+
+# Trouver les valeurs pic avec une moyenne de 30 secondes
+# peaks <- find_peaks(data_cpet, averaging = 30)
+
+# Afficher les résultats
+# print(peaks)
+
+# Même les outils automatisés font des choix analytiques!
+# La fenêtre de 30 secondes est une convention, pas une vérité absolue.
+```
+
+::: {.callout-tip}
+## Point à retenir
+Même les logiciels professionnels appliquent des **choix analytiques** (fenêtre de lissage, critères de plateau, etc.). Comprendre ces choix est essentiel pour interpréter correctement les résultats.
+:::
+
+---
+
+## Synthèse
+
+À l'issue de cette exploration :
+
+1. Nous avons vu que le VO₂max n'est pas une valeur "donnée" mais **émerge des choix analytiques**
+2. Différentes méthodes produisent des valeurs différentes
+3. La variabilité des données (bruit) influence l'estimation
+4. Comprendre ces enjeux est essentiel avant d'interpréter le VO₂max comme indicateur de performance
+
+::: {.callout-important}
+## Pour le rapport
+Vous devrez justifier vos choix méthodologiques et discuter leur impact sur vos conclusions. Référez-vous à la grille de correction!
+:::

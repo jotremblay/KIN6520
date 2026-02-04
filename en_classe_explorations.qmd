@@ -1,0 +1,293 @@
+---
+title: "KIN6520 – Explorations supplémentaires"
+subtitle: "Visualisations avancées et explorations statistiques (CPET)"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    code-fold: false
+  typst:
+    toc: true
+    number-sections: true
+  docx:
+    toc: true
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    dev: png
+    dpi: 150
+---
+
+## Préparation
+
+On repart des mêmes données que dans `en_classe.qmd`, avec quelques variables dérivées utiles.
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(patchwork)
+
+# Importation du fichier Excel COSMED
+col_names <- readxl::read_excel(
+  "data.xlsx",
+  range = "J1:BE1",
+  col_names = FALSE
+) |> unlist() |> unname()
+
+data_raw <- readxl::read_excel(
+  "data.xlsx",
+  range = "J4:BE500",
+  col_names = col_names
+) |> janitor::remove_empty()
+
+data <- data_raw |>
+  select(
+    time = t,
+    vo2 = VO2,
+    vco2 = VCO2,
+    ve = VE,
+    hr = HR,
+    rer = RQ,
+    speed_kph = Speed,
+    phase = Phase
+  ) |>
+  mutate(
+    # Conversion du temps Excel -> secondes
+    time = as.numeric(format(time, "%H")) * 3600 +
+           as.numeric(format(time, "%M")) * 60 +
+           as.numeric(format(time, "%S")),
+    # Temps relatif (depuis le debut du test)
+    time_s = time - min(time, na.rm = TRUE),
+    time_min = time_s / 60,
+    # Conversions
+    vo2_l = vo2 / 1000,
+    vco2_l = vco2 / 1000,
+    # Indices derives
+    ve_vo2 = ve / vo2_l,
+    ve_vco2 = ve / vco2_l,
+    o2_pulse = vo2 / hr
+  )
+
+glimpse(data)
+```
+
+---
+
+## 1. Grille CPET 9 panneaux (patchwork)
+
+Les grilles 3x3 sont une facon classique de resumer un test maximal. Ici :
+
+- VO2, VCO2, VE
+- FC, RER, vitesse
+- VE/VO2, VE/VCO2, O2-pulse
+
+```{r}
+make_ts <- function(df, y, ylab) {
+  ggplot(df, aes(x = time_min, y = .data[[y]])) +
+    geom_line(color = "#1f78b4", linewidth = 0.6, alpha = 0.85) +
+    labs(x = "Temps (min)", y = ylab) +
+    theme_minimal(base_size = 11)
+}
+
+p_vo2 <- make_ts(data, "vo2", "VO2 (mL/min)")
+p_vco2 <- make_ts(data, "vco2", "VCO2 (mL/min)")
+p_ve <- make_ts(data, "ve", "VE (L/min)")
+
+p_hr <- make_ts(data, "hr", "FC (bpm)")
+p_rer <- make_ts(data, "rer", "RER")
+p_speed <- make_ts(data, "speed_kph", "Vitesse (km/h)")
+
+p_ve_vo2 <- make_ts(data, "ve_vo2", "VE/VO2")
+p_ve_vco2 <- make_ts(data, "ve_vco2", "VE/VCO2")
+p_o2_pulse <- make_ts(data, "o2_pulse", "O2-pulse (mL/batt)")
+
+(p_vo2 + p_vco2 + p_ve) /
+  (p_hr + p_rer + p_speed) /
+  (p_ve_vo2 + p_ve_vco2 + p_o2_pulse)
+```
+
+---
+
+## 2. Plotly (interactif)
+
+Si `plotly` est installe, on peut rendre les figures interactives (zoom, survol, etc.).
+
+```{r}
+#| eval: true
+
+if (requireNamespace("plotly", quietly = TRUE)) {
+  p_interactif <- ggplot(
+    data,
+    aes(x = time_min, y = vo2, color = phase, text = paste0(
+      "Temps: ", round(time_min, 1), " min",
+      "<br>VO2: ", round(vo2, 0), " mL/min",
+      "<br>Vitesse: ", round(speed_kph, 1), " km/h",
+      "<br>RER: ", round(rer, 2)
+    ))
+  ) +
+    geom_line() +
+    geom_point(alpha = 0.4, size = 0.8) +
+    labs(
+      title = "VO2 interactif",
+      x = "Temps (min)",
+      y = "VO2 (mL/min)",
+      color = "Phase"
+    ) +
+    theme_minimal(base_size = 11)
+
+  plotly::ggplotly(p_interactif, tooltip = "text")
+} else {
+  message("Installez plotly avec install.packages('plotly')")
+}
+```
+
+Autre idee interactive : le V-slope (VCO2 vs VO2).
+
+```{r}
+#| eval: true
+
+if (requireNamespace("plotly", quietly = TRUE)) {
+  p_vslope <- ggplot(
+    data,
+    aes(
+      x = vo2_l,
+      y = vco2_l,
+      color = rer > 1,
+      text = paste0(
+        "VO2: ", round(vo2_l, 2), " L/min",
+        "<br>VCO2: ", round(vco2_l, 2), " L/min",
+        "<br>RER: ", round(rer, 2)
+      )
+    )
+  ) +
+    geom_point(alpha = 0.6, size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(
+      title = "V-slope interactif",
+      x = "VO2 (L/min)",
+      y = "VCO2 (L/min)",
+      color = "RER > 1"
+    ) +
+    theme_minimal(base_size = 11)
+
+  plotly::ggplotly(p_vslope, tooltip = "text")
+} else {
+  message("Installez plotly avec install.packages('plotly')")
+}
+```
+
+---
+
+## 3. Explorations visuelles supplementaires
+
+### 3.1 V-slope statique
+
+```{r}
+# Statique (ggplot)
+ggplot(data, aes(x = vo2_l, y = vco2_l)) +
+  geom_point(alpha = 0.5, color = "#2c7fb8") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(
+    title = "V-slope (VCO2 vs VO2)",
+    x = "VO2 (L/min)",
+    y = "VCO2 (L/min)"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+### 3.2 Ventilatory equivalents
+
+```{r}
+ggplot(data, aes(x = time_min)) +
+  geom_line(aes(y = ve_vo2, color = "VE/VO2"), linewidth = 0.7) +
+  geom_line(aes(y = ve_vco2, color = "VE/VCO2"), linewidth = 0.7) +
+  labs(
+    title = "Ventilatory equivalents",
+    x = "Temps (min)",
+    y = "Ratio (sans unite)",
+    color = "Indice"
+  ) +
+  theme_minimal(base_size = 11)
+```
+
+### 3.3 Carte de correlations
+
+```{r}
+cor_data <- data |>
+  select(vo2, vco2, ve, hr, rer, speed_kph, ve_vo2, ve_vco2, o2_pulse) |>
+  cor(use = "pairwise.complete.obs") |>
+  as.data.frame() |>
+  rownames_to_column("var1") |>
+  pivot_longer(-var1, names_to = "var2", values_to = "r")
+
+ggplot(cor_data, aes(x = var1, y = var2, fill = r)) +
+  geom_tile() +
+  scale_fill_gradient2(limits = c(-1, 1), low = "#d73027", mid = "white", high = "#1a9850") +
+  labs(title = "Matrice de correlations", x = NULL, y = NULL, fill = "r") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+---
+
+## 4. Explorations statistiques rapides
+
+### 4.1 Relation VO2 - vitesse (lineaire)
+
+```{r}
+modele_vo2 <- data |>
+  filter(phase == "EXERCISE") |>
+  lm(vo2 ~ speed_kph, data = _)
+
+summary(modele_vo2)
+```
+
+### 4.2 Plateau en fin de test (pente VO2)
+
+```{r}
+fenetre_sec <- 60
+
+data_fin <- data |>
+  filter(time_s >= max(time_s, na.rm = TRUE) - fenetre_sec)
+
+modele_plateau <- lm(vo2 ~ time_s, data = data_fin)
+
+pente_par_min <- coef(modele_plateau)["time_s"] * 60
+pente_par_min
+```
+
+Interpretation simple :
+
+- Une pente proche de 0 suggere un plateau
+- Une pente positive importante suggere que VO2 montait encore
+- Une pente negative faible (ex. -26 mL/min/min ici, calculee sur 6 respirations dans les 60 dernieres secondes) suggere une petite baisse/bruit en fin de test plutot qu'un vrai plateau net
+
+### 4.3 Moyennes par palier de vitesse
+
+```{r}
+resume_par_vitesse <- data |>
+  group_by(speed_kph) |>
+  summarise(
+    n = n(),
+    vo2_moy = mean(vo2, na.rm = TRUE),
+    hr_moy = mean(hr, na.rm = TRUE),
+    rer_moy = mean(rer, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(speed_kph)
+
+resume_par_vitesse
+```
+
+---
+
+## Idées d'extension (si vous voulez aller plus loin)
+
+- Essayer differentes fenetres de lissage et comparer l'impact sur le plateau
+- Colorer les courbes par phase (echauffement, palier, recovery)
+- Comparer la forme des courbes avec d'autres participants (si disponibles)
+- Tester un modele non lineaire (ex: polynomial) pour VO2 ~ vitesse
