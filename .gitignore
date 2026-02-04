@@ -1,0 +1,32 @@
+# Fichiers confidentiels - NE PAS COMMITER
+KIN6520-A-H26 Notes.xlsx
+data/mapping_confidentiel.csv
+data/assignation_etudiants.csv
+
+# Scripts internes
+scripts/
+
+# Configuration Claude
+.claude/
+
+# Fichiers rendus (sauf tutoriel.pdf)
+*.html
+*.pdf
+!tutoriel.pdf
+rapport_files/
+en_classe_files/
+en_classe_explorations_files/
+tutoriel_files/
+.quarto/
+_freeze/
+*.knit.md
+
+# Cache R
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj.user/
+
+# Fichiers système
+.DS_Store
+Thumbs.db

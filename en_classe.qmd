@@ -111,44 +111,52 @@ Nous importons seulement les colonnes pertinentes pour l'analyse :
 - `ve` : ventilation minute (L/min)
 - `hr` : fréquence cardiaque (bpm)
 - `rer` : quotient respiratoire (VCO₂/VO₂)
-- `speed_kph` : vitesse sur tapis roulant (km/h)
+- `charge` : charge externe — vitesse (km/h) ou puissance (W) selon le protocole
 - `phase` : phase du protocole (REST, WARMUP, EXERCISE, etc.)
 
 ```{r}
-# Importation du fichier Excel COSMED
-# Étape 1 : Lire les noms de colonnes depuis la ligne 1 (colonnes J à BE)
-col_names <- readxl::read_excel(
-  "data.xlsx",
-  range = "J1:BE1",
-  col_names = FALSE
-) |> unlist() |> unname()
+# ============================================================================
+# Importation des données (format simplifié pour les étudiants)
+# ============================================================================
+# Les fichiers contiennent 3 feuilles :
+# - "Data" : séries temporelles physiologiques (avec en-têtes)
+# - "Participant" : informations démographiques anonymisées
+# - "Results" : résumé des résultats COSMED
 
-# Étape 2 : Lire les données à partir de la ligne 4 (après métadonnées et unités)
-data_raw <- readxl::read_excel(
-  "data.xlsx",
-  range = "J4:BE500",
-  col_names = col_names
-)
+# Lecture des données physiologiques
+data_raw <- readxl::read_excel("data.xlsx", sheet = "Data")
 
-# Étape 3 : Sélection et renommage des colonnes d'intérêt
+# Lecture des informations du participant
+participant <- readxl::read_excel("data.xlsx", sheet = "Participant")
+
+# Fonction de conversion du temps (Excel stocke le temps en fraction de jour)
+excel_day_to_sec <- function(x) as.numeric(x) * 86400
+
+# Détecter le type de protocole (vélo vs course)
+has_power <- "Power" %in% names(data_raw) && any(!is.na(data_raw$Power) & data_raw$Power > 0)
+
+if (has_power) {
+  protocole <- "velo"
+  charge_label <- "Puissance (W)"
+} else {
+  protocole <- "course"
+  charge_label <- "Vitesse (km/h)"
+}
+
+# Sélection et renommage des colonnes d'intérêt
 data <- data_raw |>
-  select(
-    time = t,
+  mutate(
+    time = excel_day_to_sec(t),
     vo2 = VO2,
     vco2 = VCO2,
     ve = VE,
     hr = HR,
     rer = RQ,
-    speed_kph = Speed,
-    phase = Phase
+    phase = Phase,
+    # Charge externe selon le protocole
+    charge = if (has_power) Power else Speed
   ) |>
-  mutate(
-    # Conversion du temps : Excel stocke le temps comme POSIXct
-    # On extrait heures, minutes, secondes → total en secondes depuis minuit
-    time = as.numeric(format(time, "%H")) * 3600 +
-           as.numeric(format(time, "%M")) * 60 +
-           as.numeric(format(time, "%S"))
-  )
+  select(time, vo2, vco2, ve, hr, rer, charge, phase)
 
 # Aperçu de la structure des données
 summary(data)
@@ -158,10 +166,11 @@ skimr::skim(data)
 
 ::: {.callout-note}
 ## Pourquoi ces étapes?
-1. **Lignes 1-3** : Le fichier COSMED contient des métadonnées (participant, conditions) et une ligne d'unités qu'on doit ignorer
-2. **Colonnes J-BE** : Les colonnes A-I contiennent des infos sur le participant; les données physiologiques commencent en colonne J
-3. **Conversion du temps** : Excel stocke le temps comme un objet datetime qu'on convertit en secondes
-4. **Sélection** : On garde uniquement les 8 variables essentielles parmi les 48 disponibles
+1. **Feuille "Data"** : Contient les données physiologiques avec les en-têtes en ligne 1
+2. **Feuille "Participant"** : Contient les informations anonymisées du participant (ID, âge, sexe, taille, poids)
+3. **Conversion du temps** : Excel stocke le temps comme une fraction de jour (1 jour = 86400 secondes)
+4. **Détection du protocole** : Vélo (puissance en W) ou course (vitesse en km/h)
+5. **Sélection** : On garde uniquement les 8 variables essentielles parmi les 48 disponibles
 :::
 
 ::: {.callout-tip}
@@ -193,16 +202,16 @@ ggplot(data, aes(x = time, y = vo2)) +
 - Voyez-vous un **plateau** évident à la fin du test?
 :::
 
-### 1.3 VO₂ en fonction de la charge externe {#sec-vo2-vitesse}
+### 1.3 VO₂ en fonction de la charge externe {#sec-vo2-charge}
 
-Comparons avec la relation VO₂ vs vitesse :
+Comparons avec la relation VO₂ vs charge externe :
 
 ```{r}
-ggplot(data, aes(x = speed_kph, y = vo2)) +
+ggplot(data, aes(x = charge, y = vo2)) +
   geom_point(alpha = 0.5) +  # alpha = transparence (0-1)
   labs(
-    title = "Relation VO₂ - Vitesse",
-    x = "Vitesse (km/h)",
+    title = paste("Relation VO₂ -", charge_label),
+    x = charge_label,
     y = "VO₂ (mL/min)"
   )
 ```

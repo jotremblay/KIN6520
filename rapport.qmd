@@ -30,9 +30,21 @@ knitr:
 
 # Chargement des packages nécessaires
 library(tidyverse)
+library(readxl)
 
-# Chargement des données
-data_path <- "data.xlsx"
+# ============================================================================
+# VOTRE FICHIER DE DONNÉES
+# ============================================================================
+# Consultez le README pour trouver votre fichier selon votre matricule.
+# Les fichiers sont dans : data/student_files/
+#
+# Modifiez la ligne ci-dessous avec votre numéro de fichier (P01 à P15) :
+
+mon_fichier <- "P01"
+
+# ============================================================================
+# Ne modifiez rien ci-dessous
+data_path <- paste0("data/student_files/", mon_fichier, ".xlsx")
 ```
 
 # Introduction
@@ -65,19 +77,32 @@ Décrivez les données fournies et les variables retenues pour l'analyse.
 
 ```{r}
 #| label: description-donnees
-#| include = false
+#| include: false
 
-# NOTE : le fichier fourni contient généralement :
-# - une feuille "Data" (séries temporelles + métadonnées/units au début)
-# - une feuille "Results" (résumés exportés par le logiciel)
+# ============================================================================
+# Importation des données (format simplifié pour les étudiants)
+# ============================================================================
+# Les fichiers anonymisés contiennent 3 feuilles :
+# - "Data" : séries temporelles physiologiques
+# - "Participant" : informations démographiques anonymisées
+# - "Results" : résumé des résultats COSMED
 
-raw_data <- readxl::read_excel(data_path, sheet = "Data")
-raw_results <- readxl::read_excel(data_path, sheet = "Results")
+# Lecture des informations du participant
+participant <- read_excel(data_path, sheet = "Participant")
 
-# Aperçu des données (structure, types, colonnes disponibles)
-glimpse(raw_data)
-glimpse(raw_results)
+# Lecture des données physiologiques
+data_raw <- read_excel(data_path, sheet = "Data")
 
+# Aperçu des données
+glimpse(data_raw)
+glimpse(participant)
+```
+
+```{r}
+#| label: afficher-participant
+
+# Afficher les informations du participant
+knitr::kable(participant, caption = "Informations du participant (anonymisées)")
 ```
 
 <!--
@@ -94,184 +119,122 @@ Justifiez vos choix de visualisation et de préparation des données.
 ```{r}
 #| label: nettoyage-donnees
 
-# Le fichier "Data" contient souvent 3 premières lignes non analytiques :
-# 1) noms de colonnes, 2) unités, 3) champs vides. Les données commencent ensuite.
-# Plusieurs colonnes sont importées comme texte : on convertit en numérique au besoin.
+# ============================================================================
+# Conversion du temps et préparation des données
+# ============================================================================
+# Le temps est stocké en "fraction de jour" Excel (1 jour = 86400 secondes)
 
-parse_num <- function(x) readr::parse_number(as.character(x), locale = readr::locale(decimal_mark = "."))
 excel_day_to_sec <- function(x) as.numeric(x) * 86400
-safe_max <- function(x) {
-  m <- suppressWarnings(max(x, na.rm = TRUE))
-  if (is.infinite(m)) NA_real_ else m
+
+# Détecter le type de protocole (vélo vs course)
+# Vélo : colonne "Power" présente et utilisée
+# Course : colonne "Speed" présente et utilisée
+has_power <- "Power" %in% names(data_raw) && any(!is.na(data_raw$Power) & data_raw$Power > 0)
+has_speed <- "Speed" %in% names(data_raw) && any(!is.na(data_raw$Speed) & data_raw$Speed > 0)
+
+if (has_power) {
+
+  protocole <- "velo"
+  charge_label <- "Puissance (W)"
+  charge_var <- "power_w"
+} else {
+
+  protocole <- "course"
+  charge_label <- "Vitesse (km/h)"
+  charge_var <- "speed_kph"
 }
 
-raw_data <- readxl::read_excel(data_path, sheet = "Data")
-
-meta_raw <- readxl::read_excel(data_path, sheet = "Data", col_names = FALSE) %>%
-  slice(1:60)
-
-meta_kv <- tibble(
-  key = c(meta_raw[[1]], meta_raw[[4]], meta_raw[[7]]),
-  value = c(meta_raw[[2]], meta_raw[[5]], meta_raw[[8]])
-) %>%
-  filter(!is.na(key), !is.na(value)) %>%
+# Renommer et préparer les colonnes clés
+data <- data_raw |>
   mutate(
-    key = stringr::str_squish(as.character(key)),
-    value = as.character(value)
-  ) %>%
-  distinct()
+    # Conversion du temps en secondes
+    time = excel_day_to_sec(t),
+    # Renommage pour cohérence avec en_classe.qmd
+    vo2 = VO2,
+    vco2 = VCO2,
+    ve = VE,
+    hr = HR,
+    rer = RQ,
+    phase = Phase,
+    # Charge externe (selon le protocole)
+    speed_kph = if ("Speed" %in% names(data_raw)) Speed else NA_real_,
+    power_w = if ("Power" %in% names(data_raw)) Power else NA_real_,
+    # Variable générique pour la charge externe
+    charge = if (protocole == "velo") power_w else speed_kph
+  ) |>
+  # Filtrer les lignes avec données valides
+  filter(!is.na(vo2))
 
-get_meta <- function(key) {
-  value <- meta_kv %>% filter(.data$key == .env$key) %>% slice(1) %>% pull(value)
-  if (length(value) == 0) NA_character_ else value
-}
-
-participant <- tibble(
-  last_name = get_meta("Last Name"),
-  first_name = get_meta("First Name"),
-  sex = get_meta("Gender"),
-  age = suppressWarnings(parse_num(get_meta("Age"))),
-  height_cm = suppressWarnings(parse_num(get_meta("Height (cm)"))),
-  weight_kg = suppressWarnings(parse_num(get_meta("Weight (kg)"))),
-  hr_max_pred_software = suppressWarnings(parse_num(get_meta("HR Max")))
+# Résumé de la qualité des données
+summary_data <- tibble(
+  `Protocole détecté` = if (protocole == "velo") "Vélo (ergocycle)" else "Course (tapis roulant)",
+  `Nombre d'observations` = nrow(data),
+  `Durée totale (min)` = round(max(data$time, na.rm = TRUE) / 60, 1),
+  `Pas d'échantillonnage médian (s)` = round(median(diff(data$time), na.rm = TRUE), 2),
+  `Valeurs manquantes VO₂ (%)` = round(100 * mean(is.na(data_raw$VO2)), 1)
 )
 
-knitr::kable(participant)
-
-data_ts <- raw_data %>%
-  slice(-(1:3)) %>%
-  select(where(~ !all(is.na(.)))) %>%
-  mutate(
-    Phase = toupper(as.character(Phase)),
-    across(
-      .cols = -Phase,
-      .fns = ~ suppressWarnings(parse_num(.x))
-    )
-  ) %>%
-  mutate(
-    t_sec = excel_day_to_sec(t),
-    phase_time_sec = excel_day_to_sec(`Phase time`)
-  ) %>%
-  arrange(t_sec) %>%
-  mutate(
-    speed_kmh = Speed,
-    grade_pct = Grade,
-    stage_id = cumsum(
-      (Phase != lag(Phase, default = first(Phase))) |
-        (speed_kmh != lag(speed_kmh, default = first(speed_kmh))) |
-        (grade_pct != lag(grade_pct, default = first(grade_pct)))
-    )
-  )
-
-# Qualité de la série temporelle : pas d’échantillonnage, valeurs manquantes, etc.
-dt_sec <- median(diff(data_ts$t_sec), na.rm = TRUE)
-summary_dt <- tibble(
-  dt_sec = dt_sec,
-  n = nrow(data_ts),
-  prop_na_vo2 = mean(is.na(data_ts$VO2))
-)
-knitr::kable(summary_dt, digits = 3)
-
-# Lissage (utile pour les figures et l'estimation de VO₂peak)
-rolling_mean_right <- function(x, k) {
-  as.numeric(stats::filter(x, rep(1 / k, k), sides = 1))
-}
-
-k_30s <- max(1, round(30 / dt_sec))
-k_60s <- max(1, round(60 / dt_sec))
-
-data_ts <- data_ts %>%
-  mutate(
-    VO2_roll30 = rolling_mean_right(VO2, k_30s),
-    VO2kg_roll30 = rolling_mean_right(`VO2/Kg`, k_30s),
-    VO2_roll60 = rolling_mean_right(VO2, k_60s),
-    VO2kg_roll60 = rolling_mean_right(`VO2/Kg`, k_60s),
-    HR_roll30 = rolling_mean_right(HR, k_30s),
-    RQ_roll30 = rolling_mean_right(RQ, k_30s),
-    VE_roll30 = rolling_mean_right(VE, k_30s)
-  )
-
+knitr::kable(summary_data, caption = "Qualité de la série temporelle")
 ```
 
 ```{r}
-#| label: extraire-results-logiciel
+#| label: lissage-donnees
 
-# Extraire quelques valeurs "Max" du tableau Results (utile comme contrôle croisé).
-# Le format contient des en-têtes répétés : on le lit sans noms de colonnes.
+# ============================================================================
+# Lissage des données (moyenne mobile)
+# ============================================================================
+# Le lissage réduit le bruit respiratoire pour mieux estimer le VO₂max
 
-results_raw <- readxl::read_excel(data_path, sheet = "Results", col_names = FALSE)
+# Calculer le nombre de points pour une fenêtre de ~30 secondes
+dt_sec <- median(diff(data$time), na.rm = TRUE)
+k_30s <- max(1, round(30 / dt_sec))
+k_60s <- max(1, round(60 / dt_sec))
 
-results_max <- results_raw %>%
-  filter(.data$...1 %in% c("VO2", "VO2/Kg", "RQ", "METS", "Speed", "Grade", "t")) %>%
-  transmute(
-    parameter = as.character(.data$...1),
-    unit = as.character(.data$...2),
-    max = suppressWarnings(parse_num(.data$...8)),
-    norm = as.character(.data$...9),
-    class = as.character(.data$...10)
+# Fonction de moyenne mobile (alignée à droite)
+rolling_mean <- function(x, k) {
+  zoo::rollmean(x, k = k, fill = NA, align = "right")
+}
+
+# Appliquer le lissage
+data <- data |>
+  mutate(
+    vo2_smooth30 = rolling_mean(vo2, k_30s),
+    vo2_smooth60 = rolling_mean(vo2, k_60s),
+    hr_smooth30 = rolling_mean(hr, k_30s),
+    rer_smooth30 = rolling_mean(rer, k_30s),
+    ve_smooth30 = rolling_mean(ve, k_30s)
   )
 
-knitr::kable(results_max, digits = 2)
-
+cat("Fenêtre de lissage 30s :", k_30s, "points\n")
+cat("Fenêtre de lissage 60s :", k_60s, "points\n")
 ```
 
 ```{r}
 #| label: visualisation-vo2-temps
 #| fig-cap: "Évolution du VO₂ au cours du test incrémental"
 
-stage_starts <- data_ts %>%
-  group_by(stage_id, Phase, speed_kmh, grade_pct) %>%
-  summarise(t_sec = min(t_sec, na.rm = TRUE), .groups = "drop") %>%
-  arrange(t_sec) %>%
-  mutate(t_min = t_sec / 60)
+# Identifier le point de VO₂ peak (lissé 30s)
+vo2_peak_row <- data |>
+  filter(!is.na(vo2_smooth30)) |>
+  slice_max(vo2_smooth30, n = 1, with_ties = FALSE) |>
+  mutate(time_min = time / 60)
 
-vo2_peak_row <- data_ts %>%
-  filter(!is.na(VO2_roll30)) %>%
-  slice_max(VO2_roll30, n = 1, with_ties = FALSE) %>%
-  mutate(t_min = t_sec / 60)
-
-stage_mid <- data_ts %>%
-  filter(Phase == "EXERCISE") %>%
-  group_by(stage_id, speed_kmh, grade_pct) %>%
-  summarise(
-    t_min = (min(t_sec, na.rm = TRUE) + max(t_sec, na.rm = TRUE)) / 2 / 60,
-    .groups = "drop"
-  ) %>%
-  mutate(
-    label = ifelse(is.na(grade_pct) | grade_pct == 0, paste0(speed_kmh, " km/h"), paste0(speed_kmh, " km/h, ", grade_pct, "%"))
-  )
-
-label_y <- safe_max(data_ts$VO2_roll30) * 1.02
-
-ggplot(data_ts, aes(x = t_sec / 60)) +
-  geom_vline(
-    data = stage_starts %>% filter(Phase == "EXERCISE"),
-    aes(xintercept = t_min),
-    color = "grey75",
-    linewidth = 0.3
-  ) +
-  geom_text(
-    data = stage_mid,
-    aes(x = t_min, label = label),
-    inherit.aes = FALSE,
-    y = label_y,
-    size = 3,
-    color = "grey30",
-    vjust = 0
-  ) +
-  geom_line(aes(y = VO2), linewidth = 0.35, alpha = 0.5, color = "#2C7FB8") +
-  geom_line(aes(y = VO2_roll30), linewidth = 0.7, color = "#D95F0E") +
+# Graphique VO₂ vs temps
+ggplot(data, aes(x = time / 60)) +
+  geom_line(aes(y = vo2), linewidth = 0.35, alpha = 0.5, color = "#2C7FB8") +
+  geom_line(aes(y = vo2_smooth30), linewidth = 0.7, color = "#D95F0E") +
   geom_point(
     data = vo2_peak_row,
-    aes(y = VO2_roll30),
+    aes(x = time_min, y = vo2_smooth30),
     color = "#D95F0E",
     size = 2
   ) +
   geom_label(
     data = vo2_peak_row,
     aes(
-      y = VO2_roll30,
-      label = paste0("VO₂peak(30s) = ", round(VO2_roll30), " mL/min")
+      x = time_min,
+      y = vo2_smooth30,
+      label = paste0("VO₂peak(30s) = ", round(vo2_smooth30), " mL/min")
     ),
     hjust = 0,
     nudge_x = 0.2,
@@ -283,33 +246,26 @@ ggplot(data_ts, aes(x = t_sec / 60)) +
     caption = paste0(
       "Bleu = brut; orange = moyenne mobile ~30 s (k=",
       k_30s,
-      "). Lignes verticales = changements de paliers (EXERCISE)."
+      ")."
     )
   ) +
   theme_minimal(base_size = 11)
-
 ```
 
 ```{r}
-#| label: visualisation-vo2-puissance
-#| fig-cap: "Relation entre le VO₂ et la charge externe (ex. vitesse sur tapis roulant)"
+#| label: visualisation-vo2-charge
+#| fig-cap: "Relation entre le VO₂ et la charge externe"
 
-# Sur tapis roulant, la « charge » est souvent définie par la vitesse (et la pente).
-# Une relation VO₂–vitesse (à pente donnée) permet de vérifier la cohérence globale.
-
-ggplot(
-  data_ts %>% filter(Phase == "EXERCISE"),
-  aes(x = speed_kmh, y = VO2_roll30)
-) +
+# Relation VO₂ vs charge externe (puissance ou vitesse selon le protocole)
+ggplot(data, aes(x = charge, y = vo2_smooth30)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", se = TRUE, linewidth = 0.8) +
   labs(
-    x = "Vitesse (km/h)",
+    x = charge_label,
     y = "VO₂ (mL/min) – lissé ~30 s",
-    caption = "Une forte dispersion, ou une relation non monotone, suggère des artefacts ou une cinétique incomplète."
+    caption = "Une forte dispersion ou relation non monotone suggère des artefacts."
   ) +
   theme_minimal(base_size = 11)
-
 ```
 
 <!--
@@ -324,30 +280,36 @@ Justifiez ici :
 Décrivez les méthodes utilisées pour estimer le VO₂max et justifiez vos choix.
 
 ```{r}
-#| label: methode-pic
+#| label: methodes-estimation
+
+# ============================================================================
+# Comparaison des méthodes d'estimation du VO₂max
+# ============================================================================
 
 # Méthode 1 : Pic brut
-vo2_peak_raw_ml_min <- max(data_ts$VO2, na.rm = TRUE)
-vo2_peak_raw_ml_kg_min <- max(data_ts$`VO2/Kg`, na.rm = TRUE)
+vo2_peak_raw <- max(data$vo2, na.rm = TRUE)
 
-```
+# Méthode 2 : Moyenne mobile 30 secondes
+vo2_peak_30s <- max(data$vo2_smooth30, na.rm = TRUE)
 
-```{r}
-#| label: methode-moyenne-mobile
+# Méthode 3 : Moyenne mobile 60 secondes
+vo2_peak_60s <- max(data$vo2_smooth60, na.rm = TRUE)
 
-# Méthode 2 : Moyenne mobile
-# Idée ACSM (et pratique de labo) : utiliser un VO₂ "peak" via moyenne mobile (p.ex. 30–60 s),
-# car le bruit respiratoire peut gonfler le pic instantané.
-
-vo2_peak_30s_ml_min <- max(data_ts$VO2_roll30, na.rm = TRUE)
-vo2_peak_60s_ml_min <- max(data_ts$VO2_roll60, na.rm = TRUE)
-
+# Tableau comparatif
 vo2_estimates <- tibble(
-  methode = c("Pic brut", paste0("Moyenne mobile ~30 s (k=", k_30s, ")"), paste0("Moyenne mobile ~60 s (k=", k_60s, ")")),
-  vo2_ml_min = c(vo2_peak_raw_ml_min, vo2_peak_30s_ml_min, vo2_peak_60s_ml_min)
+  Méthode = c(
+    "Pic brut",
+    paste0("Moyenne mobile ~30 s (k=", k_30s, ")"),
+    paste0("Moyenne mobile ~60 s (k=", k_60s, ")")
+  ),
+  `VO₂ (mL/min)` = c(vo2_peak_raw, vo2_peak_30s, vo2_peak_60s),
+  `VO₂/kg (mL/kg/min)` = round(`VO₂ (mL/min)` / participant$Weight_kg, 1),
+  `Différence vs 30s (%)` = round(
+    100 * (`VO₂ (mL/min)` - vo2_peak_30s) / vo2_peak_30s, 1
+  )
 )
-knitr::kable(vo2_estimates, digits = 1)
 
+knitr::kable(vo2_estimates, digits = 1, caption = "Comparaison des méthodes d'estimation")
 ```
 
 <!--
@@ -374,72 +336,66 @@ Expliquez ici :
 #| label: figure-principale
 #| fig-cap: "Comparaison des données brutes et lissées du VO₂"
 
-plot_vo2 <- data_ts %>%
-  mutate(t_min = t_sec / 60) %>%
-  select(t_min, VO2, VO2_roll30, VO2_roll60) %>%
+# Préparer les données pour le graphique
+plot_vo2 <- data |>
+  select(time, vo2, vo2_smooth30, vo2_smooth60) |>
   pivot_longer(
-    cols = c(VO2, VO2_roll30, VO2_roll60),
+    cols = c(vo2, vo2_smooth30, vo2_smooth60),
     names_to = "serie",
-    values_to = "vo2"
-  ) %>%
+    values_to = "value"
+  ) |>
   mutate(
     serie = recode(
       serie,
-      VO2 = "Brut",
-      VO2_roll30 = "Lissé ~30 s",
-      VO2_roll60 = "Lissé ~60 s"
-    )
+      vo2 = "Brut",
+      vo2_smooth30 = "Lissé ~30 s",
+      vo2_smooth60 = "Lissé ~60 s"
+    ),
+    time_min = time / 60
   )
 
-ggplot(plot_vo2, aes(x = t_min, y = vo2, color = serie)) +
+ggplot(plot_vo2, aes(x = time_min, y = value, color = serie)) +
   geom_line(linewidth = 0.6, alpha = 0.9) +
-  scale_color_manual(values = c("Brut" = "#2C7FB8", "Lissé ~30 s" = "#D95F0E", "Lissé ~60 s" = "#31A354")) +
+  scale_color_manual(
+    values = c("Brut" = "#2C7FB8", "Lissé ~30 s" = "#D95F0E", "Lissé ~60 s" = "#31A354")
+  ) +
   labs(x = "Temps (min)", y = "VO₂ (mL/min)", color = NULL) +
   theme_minimal(base_size = 11)
-
 ```
 
 ```{r}
-#| label: figure-vo2-hr-rer-ve-temps
-#| fig-cap: "VO₂, FC, RER et VE au cours du test (annotations des paliers et points max)"
+#| label: figure-multiparametres
+#| fig-cap: "VO₂, FC, RER et VE au cours du test"
+#| fig-height: 8
 
-stage_starts <- data_ts %>%
-  group_by(stage_id, Phase, speed_kmh, grade_pct) %>%
-  summarise(t_sec = min(t_sec, na.rm = TRUE), .groups = "drop") %>%
-  arrange(t_sec) %>%
-  mutate(t_min = t_sec / 60)
-
-time_long <- data_ts %>%
-  mutate(t_min = t_sec / 60)
-
+# Préparer les données multi-paramètres
 time_long <- bind_rows(
-  time_long %>% transmute(t_min, Phase, metric = "VO₂ (mL/min)", value = VO2, value_smooth = VO2_roll30),
-  time_long %>% transmute(t_min, Phase, metric = "FC (bpm)", value = HR, value_smooth = HR_roll30),
-  time_long %>% transmute(t_min, Phase, metric = "RER (RQ)", value = RQ, value_smooth = RQ_roll30),
-  time_long %>% transmute(t_min, Phase, metric = "VE (L/min)", value = VE, value_smooth = VE_roll30)
+  data |> transmute(time_min = time / 60, metric = "VO₂ (mL/min)", value = vo2, value_smooth = vo2_smooth30),
+  data |> transmute(time_min = time / 60, metric = "FC (bpm)", value = hr, value_smooth = hr_smooth30),
+  data |> transmute(time_min = time / 60, metric = "RER (RQ)", value = rer, value_smooth = rer_smooth30),
+  data |> transmute(time_min = time / 60, metric = "VE (L/min)", value = ve, value_smooth = ve_smooth30)
 )
 
+# Identifier les pics pour chaque métrique
 peaks <- bind_rows(
-  data_ts %>% filter(!is.na(VO2_roll30)) %>% slice_max(VO2_roll30, n = 1, with_ties = FALSE) %>% transmute(metric = "VO₂ (mL/min)", t_min = t_sec / 60, value = VO2_roll30, label = "VO₂peak"),
-  data_ts %>% filter(!is.na(HR)) %>% slice_max(HR, n = 1, with_ties = FALSE) %>% transmute(metric = "FC (bpm)", t_min = t_sec / 60, value = HR, label = "FCpeak"),
-  data_ts %>% filter(!is.na(RQ)) %>% slice_max(RQ, n = 1, with_ties = FALSE) %>% transmute(metric = "RER (RQ)", t_min = t_sec / 60, value = RQ, label = "RERpeak"),
-  data_ts %>% filter(!is.na(VE)) %>% slice_max(VE, n = 1, with_ties = FALSE) %>% transmute(metric = "VE (L/min)", t_min = t_sec / 60, value = VE, label = "VEpeak")
+  data |> filter(!is.na(vo2_smooth30)) |> slice_max(vo2_smooth30, n = 1, with_ties = FALSE) |>
+    transmute(metric = "VO₂ (mL/min)", time_min = time / 60, value = vo2_smooth30, label = "VO₂peak"),
+  data |> filter(!is.na(hr)) |> slice_max(hr, n = 1, with_ties = FALSE) |>
+    transmute(metric = "FC (bpm)", time_min = time / 60, value = hr, label = "FCpeak"),
+  data |> filter(!is.na(rer)) |> slice_max(rer, n = 1, with_ties = FALSE) |>
+    transmute(metric = "RER (RQ)", time_min = time / 60, value = rer, label = "RERpeak"),
+  data |> filter(!is.na(ve)) |> slice_max(ve, n = 1, with_ties = FALSE) |>
+    transmute(metric = "VE (L/min)", time_min = time / 60, value = ve, label = "VEpeak")
 )
 
-ggplot(time_long, aes(x = t_min)) +
-  geom_vline(
-    data = stage_starts %>% filter(Phase == "EXERCISE"),
-    aes(xintercept = t_min),
-    color = "grey75",
-    linewidth = 0.3
-  ) +
+ggplot(time_long, aes(x = time_min)) +
   geom_line(aes(y = value), linewidth = 0.35, alpha = 0.55, color = "#2C7FB8") +
   geom_line(aes(y = value_smooth), linewidth = 0.65, alpha = 0.9, color = "#D95F0E") +
   geom_point(data = peaks, aes(y = value), size = 2, color = "black") +
   geom_text(
     data = peaks,
     aes(y = value, label = label),
-    nudge_x = 0.2,
+    nudge_x = 0.5,
     hjust = 0,
     size = 3
   ) +
@@ -447,129 +403,61 @@ ggplot(time_long, aes(x = t_min)) +
   labs(
     x = "Temps (min)",
     y = NULL,
-    caption = "Bleu = brut; orange = moyenne mobile ~30 s; lignes verticales = changements de paliers (EXERCISE)."
+    caption = "Bleu = brut; orange = moyenne mobile ~30 s."
   ) +
   theme_minimal(base_size = 11)
-
 ```
 
-```{r}
-#| label: figure-vs-pct-vo2max
-#| fig-cap: "FC, RER et VE en fonction du %VO₂max (EXERCISE)"
-
-vo2_ref <- safe_max(data_ts$VO2_roll30)
-if (is.na(vo2_ref)) {
-  stop("Impossible de calculer %VO₂max : VO2_roll30 est manquant (vérifier le nettoyage/la conversion numérique).")
-}
-
-pct_long <- data_ts %>%
-  filter(Phase == "EXERCISE") %>%
-  mutate(
-    pct_vo2max = 100 * VO2_roll30 / vo2_ref,
-    pct_vo2max = pmin(pmax(pct_vo2max, 0), 200)
-  ) %>%
-  select(pct_vo2max, HR, RQ, VE) %>%
-  pivot_longer(cols = c(HR, RQ, VE), names_to = "metric", values_to = "value") %>%
-  mutate(
-    metric = recode(metric, HR = "FC (bpm)", RQ = "RER (RQ)", VE = "VE (L/min)")
-  )
-
-ggplot(pct_long, aes(x = pct_vo2max, y = value)) +
-  geom_point(alpha = 0.25, size = 1) +
-  geom_smooth(method = "loess", se = TRUE, linewidth = 0.9) +
-  facet_wrap(~metric, ncol = 1, scales = "free_y") +
-  scale_x_continuous(limits = c(0, 110), breaks = seq(0, 110, 10)) +
-  labs(x = "%VO₂max (réf. = VO₂peak lissé ~30 s)", y = NULL) +
-  theme_minimal(base_size = 11)
-
-```
-
-## Critères de maximalité (ACSM) – Description factuelle
+## Critères de maximalité (ACSM)
 
 ```{r}
 #| label: criteres-maximalite
 
-# Exemples de critères couramment utilisés pour juger si un effort maximal a été atteint :
-# - RER (RQ) élevé (souvent ≥ 1.10; parfois ≥ 1.05 selon contexte)
-# - FC proche de la FCmax prédite (souvent ±10 bpm)
-# - Plateau du VO₂ (ΔVO₂ faible malgré augmentation de charge)
-# - (Si mesuré) lactate élevé, RPE/Borg élevé
+# ============================================================================
+# Évaluation des critères de maximalité
+# ============================================================================
 
-age <- participant$age[[1]]
-sex <- participant$sex[[1]]
-weight_kg <- participant$weight_kg[[1]]
-hr_max_pred_220 <- 220 - age
-hr_max_ref <- dplyr::coalesce(participant$hr_max_pred_software[[1]], hr_max_pred_220)
+# Récupérer les données du participant
+age <- participant$Age
+weight_kg <- participant$Weight_kg
 
+# FCmax prédite (équation 220 - âge)
+hr_max_pred <- 220 - age
+
+# Seuils indicatifs
 rer_threshold <- 1.10
 hr_within_bpm <- 10
-plateau_threshold_ml_min <- 150
-plateau_threshold_ml_kg_min <- 2.1
 
-rer_peak <- max(data_ts$RQ, na.rm = TRUE)
-hr_peak <- max(data_ts$HR, na.rm = TRUE)
+# Valeurs observées
+rer_peak <- max(data$rer, na.rm = TRUE)
+hr_peak <- max(data$hr, na.rm = TRUE)
 
-stage_summary <- data_ts %>%
-  group_by(stage_id, Phase, speed_kmh, grade_pct) %>%
-  summarise(
-    n = n(),
-    duration_sec = max(t_sec, na.rm = TRUE) - min(t_sec, na.rm = TRUE),
-    vo2_ml_min_mean = mean(VO2, na.rm = TRUE),
-    vo2_ml_min_tail30 = mean(tail(VO2, k_30s), na.rm = TRUE),
-    vo2kg_tail30 = mean(tail(`VO2/Kg`, k_30s), na.rm = TRUE),
-    rer_tail30 = mean(tail(RQ, k_30s), na.rm = TRUE),
-    hr_tail30 = mean(tail(HR, k_30s), na.rm = TRUE),
-    .groups = "drop"
-  )
-
-exercise_stages <- stage_summary %>% filter(Phase == "EXERCISE")
-last_two <- exercise_stages %>% slice_tail(n = 2)
-
-delta_vo2_last_two <- if (nrow(last_two) == 2) {
-  last_two$vo2_ml_min_tail30[2] - last_two$vo2_ml_min_tail30[1]
-} else {
-  NA_real_
-}
-
-delta_vo2_last_two_ml_kg_min <- delta_vo2_last_two / weight_kg
-
+# Tableau des critères
 maximality_table <- tibble(
-  critere = c(
-    "RER (RQ) peak",
-    "RER critère atteint?",
-    "FC peak",
-    "FCmax référence (logiciel ou 220-âge)",
-    paste0("FC à ≤ ", hr_within_bpm, " bpm de FCmax?"),
-    "ΔVO₂ (fin des 2 derniers stades) [mL/min]",
-    paste0("Plateau ≤ ", plateau_threshold_ml_min, " mL/min?"),
-    "ΔVO₂ (fin des 2 derniers stades) [mL/kg/min]",
-    paste0("Plateau ≤ ", plateau_threshold_ml_kg_min, " mL/kg/min?")
+  Critère = c(
+    "RER (RQ) peak observé",
+    paste0("RER ≥ ", rer_threshold, " ?"),
+    "FC peak observée (bpm)",
+    "FCmax prédite (220 - âge)",
+    paste0("FC à ≤ ", hr_within_bpm, " bpm de FCmax ?")
   ),
-  valeur = c(
-    rer_peak,
-    rer_peak >= rer_threshold,
-    hr_peak,
-    hr_max_ref,
-    abs(hr_peak - hr_max_ref) <= hr_within_bpm,
-    delta_vo2_last_two,
-    ifelse(is.na(delta_vo2_last_two), NA, abs(delta_vo2_last_two) <= plateau_threshold_ml_min),
-    delta_vo2_last_two_ml_kg_min,
-    ifelse(is.na(delta_vo2_last_two_ml_kg_min), NA, abs(delta_vo2_last_two_ml_kg_min) <= plateau_threshold_ml_kg_min)
+  Valeur = c(
+    round(rer_peak, 2),
+    ifelse(rer_peak >= rer_threshold, "Oui ✓", "Non ✗"),
+    round(hr_peak),
+    round(hr_max_pred),
+    ifelse(abs(hr_peak - hr_max_pred) <= hr_within_bpm, "Oui ✓", "Non ✗")
   ),
-  commentaire = c(
+  Note = c(
     NA,
-    paste0("Seuil indicatif = ", rer_threshold, "."),
+    paste0("Seuil indicatif = ", rer_threshold),
     NA,
-    "Si la FCmax du logiciel (meta) est disponible, elle est priorisée.",
-    paste0("Seuil indicatif = ", hr_within_bpm, " bpm."),
-    "Approche stade→stade; à interpréter selon le protocole (paliers vs rampe).",
-    NA,
-    "Conversion via masse corporelle (meta).",
-    NA
+    "Équation classique (moins précise chez certaines populations)",
+    paste0("Seuil indicatif = ±", hr_within_bpm, " bpm")
   )
 )
-knitr::kable(maximality_table, digits = 2)
 
+knitr::kable(maximality_table, caption = "Évaluation des critères de maximalité")
 ```
 
 ## Valeurs obtenues
@@ -577,103 +465,35 @@ knitr::kable(maximality_table, digits = 2)
 ```{r}
 #| label: tableau-resultats
 
-vo2_peak_raw_ml_min <- safe_max(data_ts$VO2)
-vo2_peak_raw_ml_kg_min <- safe_max(data_ts$`VO2/Kg`)
-
-vo2_peak_30s_ml_min <- safe_max(data_ts$VO2_roll30)
-vo2_peak_60s_ml_min <- safe_max(data_ts$VO2_roll60)
-
-vo2kg_peak_30s <- safe_max(data_ts$VO2kg_roll30)
-vo2kg_peak_60s <- safe_max(data_ts$VO2kg_roll60)
-
-vo2_software <- results_max %>% filter(parameter == "VO2") %>% pull(max) %>% dplyr::first()
-vo2kg_software <- results_max %>% filter(parameter == "VO2/Kg") %>% pull(max) %>% dplyr::first()
-rq_software <- results_max %>% filter(parameter == "RQ") %>% pull(max) %>% dplyr::first()
-
-tbl_vo2 <- tibble(
-  estimate = c(
-    "Pic brut (VO₂)",
-    "VO₂peak lissé ~30 s",
-    "VO₂peak lissé ~60 s",
-    "VO₂max logiciel (Results)"
-  ),
-  vo2_ml_min = c(vo2_peak_raw_ml_min, vo2_peak_30s_ml_min, vo2_peak_60s_ml_min, vo2_software),
-  delta_vs_30s_ml_min = vo2_ml_min - vo2_peak_30s_ml_min,
-  delta_vs_30s_pct = 100 * delta_vs_30s_ml_min / vo2_peak_30s_ml_min
+# Lecture des résultats COSMED (si disponible)
+results_cosmed <- tryCatch(
+  read_excel(data_path, sheet = "Results"),
+  error = function(e) NULL
 )
 
-tbl_vo2kg <- tibble(
-  estimate = c(
-    "Pic brut (VO₂/kg)",
-    "VO₂peak/kg lissé ~30 s",
-    "VO₂peak/kg lissé ~60 s",
-    "VO₂max/kg logiciel (Results)"
+# Tableau récapitulatif final
+tbl_final <- tibble(
+  Paramètre = c(
+    "VO₂peak (pic brut)",
+    "VO₂peak (lissé 30s)",
+    "VO₂peak (lissé 60s)",
+    "VO₂peak relatif (lissé 30s)",
+    "FC peak",
+    "RER peak",
+    "VE peak"
   ),
-  vo2_ml_kg_min = c(vo2_peak_raw_ml_kg_min, vo2kg_peak_30s, vo2kg_peak_60s, vo2kg_software),
-  delta_vs_30s_ml_kg_min = vo2_ml_kg_min - vo2kg_peak_30s,
-  delta_vs_30s_pct = 100 * delta_vs_30s_ml_kg_min / vo2kg_peak_30s
-)
-
-knitr::kable(tbl_vo2, digits = 2)
-knitr::kable(tbl_vo2kg, digits = 2)
-
-if (!is.na(rq_software)) {
-  tibble(RQ_max_logiciel = rq_software) %>% knitr::kable(digits = 2)
-}
-
-```
-
-## Économie de locomotion (et vérification de l’état stable)
-
-```{r}
-#| label: economie-steady-state
-
-# IMPORTANT : l’économie de locomotion se calcule idéalement à intensité constante (état stable).
-# Dans un protocole incrémental avec paliers courts, le VO₂ peut ne pas atteindre l’état stable,
-# ce qui biaise l’économie (VO₂ encore en dérive).
-
-# Diagnostic simple (par stade) : pente du VO₂/kg sur la fin du stade + coefficient de variation.
-steady_state_check <- data_ts %>%
-  filter(Phase == "EXERCISE") %>%
-  group_by(stage_id, speed_kmh, grade_pct) %>%
-  group_modify(~ {
-    df <- .x
-    df_tail60 <- tail(df, min(nrow(df), k_60s))
-    df_tail30 <- tail(df, min(nrow(df), k_30s))
-
-    slope_vo2kg_per_min <- if (nrow(df_tail60) >= 3) {
-      unname(coef(lm(`VO2/Kg` ~ I(t_sec / 60), data = df_tail60))[2])
-    } else {
-      NA_real_
-    }
-
-    cv_vo2kg_tail30 <- sd(df_tail30$`VO2/Kg`, na.rm = TRUE) / mean(df_tail30$`VO2/Kg`, na.rm = TRUE)
-
-    tibble(
-      n = nrow(df),
-      duration_sec = max(df$t_sec, na.rm = TRUE) - min(df$t_sec, na.rm = TRUE),
-      slope_vo2kg_per_min = slope_vo2kg_per_min,
-      cv_vo2kg_tail30 = cv_vo2kg_tail30,
-      vo2kg_tail30 = mean(df_tail30$`VO2/Kg`, na.rm = TRUE),
-      rer_tail30 = mean(df_tail30$RQ, na.rm = TRUE)
-    )
-  }) %>%
-  ungroup() %>%
-  mutate(
-    # Seuils indicatifs (à discuter/adapter dans le texte)
-    steady_state_flag = (abs(slope_vo2kg_per_min) < 0.5) & (cv_vo2kg_tail30 < 0.10)
+  Valeur = c(
+    paste0(round(vo2_peak_raw), " mL/min"),
+    paste0(round(vo2_peak_30s), " mL/min"),
+    paste0(round(vo2_peak_60s), " mL/min"),
+    paste0(round(vo2_peak_30s / weight_kg, 1), " mL/kg/min"),
+    paste0(round(hr_peak), " bpm"),
+    round(rer_peak, 2),
+    paste0(round(max(data$ve, na.rm = TRUE), 1), " L/min")
   )
+)
 
-# Si état stable plausible : calcul d'économie (mL/kg/km) sur la fin du stade
-economy_table <- steady_state_check %>%
-  mutate(
-    ml_kg_km = vo2kg_tail30 * 60 / speed_kmh
-  ) %>%
-  select(stage_id, speed_kmh, grade_pct, duration_sec, vo2kg_tail30, rer_tail30, slope_vo2kg_per_min, cv_vo2kg_tail30, steady_state_flag, ml_kg_km)
-
-knitr::kable(steady_state_check, digits = 3)
-knitr::kable(economy_table, digits = 3)
-
+knitr::kable(tbl_final, caption = "Résumé des valeurs physiologiques")
 ```
 
 <!--
@@ -712,61 +532,6 @@ Identifiez les sources d'incertitude :
 - Critères de maximalité (RER, FC, plateau?)
 - Représentativité d'un test unique
 -->
-
-## Qualité générale du test (lignes directrices)
-
-<!--
-Idées d'éléments à documenter (guidelines ACSM / bonnes pratiques de labo) :
-- Durée d'exercice jusqu'à épuisement (souvent visée ~8–12 min pour un test VO₂max)
-- Progression de la charge (paliers vs rampe) et implications sur cinétique/plateau/économie
-- Présence d'échauffement, consignes, arrêt du test (raison)
-- Indices d'artefacts : dérive de FiO₂/FiCO₂, FeO₂/FeCO₂, SpO₂ anormale, ruptures de signal
-- Cohérence physiologique : relation VO₂–vitesse, FC–VO₂, hausse de VE, RER en fin de test
--->
-
-```{r}
-#| label: qc-test-quality
-
-# Résumé QC "automatique" : à interpréter et à compléter dans le texte.
-
-exercise_duration_sec_meta <- excel_day_to_sec(suppressWarnings(parse_num(get_meta("Exercise Duration"))))
-test_duration_sec_meta <- excel_day_to_sec(suppressWarnings(parse_num(get_meta("Test Duration"))))
-
-exercise_range <- data_ts %>%
-  filter(Phase == "EXERCISE") %>%
-  summarise(
-    t_start = min(t_sec, na.rm = TRUE),
-    t_end = max(t_sec, na.rm = TRUE),
-    duration_sec = t_end - t_start,
-    .groups = "drop"
-  )
-
-stage_durations <- data_ts %>%
-  filter(Phase == "EXERCISE") %>%
-  group_by(stage_id, speed_kmh, grade_pct) %>%
-  summarise(
-    duration_sec = max(t_sec, na.rm = TRUE) - min(t_sec, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-qc_summary <- tibble(
-  exercise_duration_sec_meta = exercise_duration_sec_meta,
-  test_duration_sec_meta = test_duration_sec_meta,
-  exercise_duration_sec_ts = exercise_range$duration_sec,
-  n_stages_exercise = nrow(stage_durations),
-  stage_duration_median_sec = median(stage_durations$duration_sec, na.rm = TRUE),
-  stage_duration_min_sec = min(stage_durations$duration_sec, na.rm = TRUE),
-  prop_na_vo2 = mean(is.na(data_ts$VO2)),
-  prop_na_hr = mean(is.na(data_ts$HR)),
-  vo2_peak_ml_min = max(data_ts$VO2, na.rm = TRUE),
-  rer_peak = max(data_ts$RQ, na.rm = TRUE),
-  hr_peak = max(data_ts$HR, na.rm = TRUE),
-  duration_target_8_12min = dplyr::between(exercise_range$duration_sec / 60, 8, 12)
-)
-
-knitr::kable(qc_summary, digits = 3)
-
-```
 
 ## VO₂max et performance d'endurance {#sec-vo2max-performance}
 
